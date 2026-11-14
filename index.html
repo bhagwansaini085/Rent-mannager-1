@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Rent Manager</title>
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f4f6fb;--card:#fff;--text:#1b2233;--mute:#6b7488;--line:#e4e8f0;--acc:#4f46e5;--acc2:#eef0ff;--ok:#15803d;--okbg:#dcfce7;--bad:#b91c1c;--badbg:#fee2e2}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#12151f;--card:#1c2030;--text:#eef1f8;--mute:#9aa3b8;--line:#2a3044;--acc:#8b87ff;--acc2:#262a4a;--ok:#4ade80;--okbg:#14341f;--bad:#f87171;--badbg:#3b1717}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:520px;margin:0 auto;padding:16px 16px 40px}h1{font-size:22px;margin:4px 0 2px}h2{font-size:17px;margin:0 0 10px}
+.sub{color:var(--mute);font-size:14px;margin:0 0 16px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.hero{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:0}.hero .sub{color:#e0e0ff}.big{font-size:34px;font-weight:700;margin:2px 0}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+input{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:16px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--acc);color:#fff;font-weight:600;width:100%;margin-top:12px;cursor:pointer}
+button.ghost{background:var(--acc2);color:var(--acc)}button.danger{background:var(--badbg);color:var(--bad)}
+.item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}.item:last-child{border:0}.item b{display:block}.item small{color:var(--mute)}
+.chip{display:inline-block;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:600;border:0;width:auto;margin:0}.ok{background:var(--okbg);color:var(--ok)}.bad{background:var(--badbg);color:var(--bad)}
+.code{font:700 30px ui-monospace,Menlo,monospace;letter-spacing:6px;text-align:center;background:var(--acc2);color:var(--acc);border-radius:14px;padding:14px;margin:8px 0}
+.kv{display:flex;justify-content:space-between;padding:6px 0}.kv span:first-child{color:var(--mute)}
+.mrow{padding:12px 0;border-bottom:1px solid var(--line)}.mrow:last-child{border:0}.mrow .top{font-weight:600;margin-bottom:6px}
+.line{display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:3px 0}
+.preview{background:var(--acc2);color:var(--acc);padding:10px 12px;border-radius:12px;margin-top:10px;font-weight:600}
+.back{background:none;color:var(--acc);width:auto;padding:4px 0;margin:0 0 8px}.msg{color:var(--bad);font-size:14px;margin-top:8px}.center{text-align:center;color:var(--mute);padding:40px 0}
+</style></head><body><div class="wrap" id="app"><div class="center">Loading…</div></div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,collection,onSnapshot,setDoc,updateDoc,deleteDoc,getDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ====== PASTE YOUR FIREBASE CONFIG HERE (see README.md) ====== */
+const firebaseConfig={apiKey:"",authDomain:"",projectId:"",appId:""};
+/* ============================================================= */
+
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+let RATE=10,role=null,landlord=null,tenants=[],sel=null,me=null,err='',confirmDel=false,unsubs=[];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+const ym=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),nowM=()=>ym(new Date());
+const mlabel=m=>{const[y,mo]=m.split('-');return new Date(+y,+mo-1,1).toLocaleString('en-IN',{month:'long',year:'numeric'})};
+const genCode=()=>{const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<6;i++)s+=c[Math.floor(Math.random()*c.length)];return s};
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(_){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(_){}},del:k=>{try{localStorage.removeItem(k)}catch(_){}}};
+
+function monthsOf(t){const out=[];let[y,m]=t.startMonth.split('-').map(Number);const end=nowM();
+ while(true){const k=y+'-'+String(m).padStart(2,'0');out.push(k);if(k>=end||out.length>36)break;m++;if(m>12){m=1;y++}}return out.reverse()}
+const prevReading=(t,month)=>{const r=(t.readings||[]).filter(x=>x.month<month).sort((a,b)=>a.month<b.month?-1:1);return r.length?r[r.length-1].reading:t.initialReading};
+function summary(t){const pay=t.payments||{},rd={};(t.readings||[]).forEach(r=>rd[r.month]=r);let pending=0;
+ const rows=monthsOf(t).map(m=>{const p=pay[m]||{},r=rd[m];if(!p.rent)pending+=+t.rent;if(r&&!p.bill)pending+=r.amount;return{m,rent:+t.rent,rentPaid:!!p.rent,r,billPaid:!!p.bill}});
+ const d=new Date(),cur=rows[0],mk=(y,mo)=>new Date(y,mo,+t.dueDay);
+ const due=cur.rentPaid?mk(d.getFullYear(),d.getMonth()+1):mk(d.getFullYear(),d.getMonth());
+ return{rows,pending,due,days:Math.ceil((due-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/864e5)}}
+const dueText=s=>{const ds=s.due.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+ return s.days<0?`${ds} · overdue by ${-s.days} day${s.days==-1?'':'s'}`:s.days==0?`${ds} · due today`:`${ds} · in ${s.days} day${s.days==1?'':'s'}`};
+
+const monthRows=(t,ed)=>summary(t).rows.map(x=>{
+ const chip=(p,k)=>ed?`<button class="chip ${p?'ok':'bad'}" data-act="pay" data-m="${x.m}" data-k="${k}">${p?'Paid':'Unpaid'}</button>`:`<span class="chip ${p?'ok':'bad'}">${p?'Paid':'Unpaid'}</span>`;
+ return `<div class="mrow"><div class="top">${mlabel(x.m)}</div><div class="line"><span>Rent ${inr(x.rent)}</span>${chip(x.rentPaid,'rent')}</div>
+ ${x.r?`<div class="line"><span>Electricity ${x.r.units} units × ${inr(x.r.rate)} = <b>${inr(x.r.amount)}</b></span>${chip(x.billPaid,'bill')}</div>`:`<div class="line"><span style="color:var(--mute)">Electricity: reading not added yet</span></div>`}</div>`}).join('');
+
+const vStart=()=>`<h1>Rent Manager</h1><p class="sub">Who are you?</p><div class="card"><button data-act="role" data-r="tenant">I’m a tenant</button><button class="ghost" data-act="role" data-r="landlord">I’m the landlord</button></div>`;
+const vLandlordLogin=()=>`<button class="back" data-act="home">← Back</button><h1>Landlord login</h1><div class="card"><label>Email</label><input id="em" type="email" autocomplete="username"><label>Password</label><input id="pw" type="password" autocomplete="current-password"><button data-act="llogin">Log in</button>${err?`<div class="msg">${esc(err)}</div>`:''}</div>`;
+const vList=()=>`<h1>My Tenants</h1><p class="sub">Add tenants, record meter readings, track payments.</p>
+<div class="card"><h2>Tenants</h2>${tenants.length?tenants.map(t=>{const s=summary(t);return `<div class="item" data-act="open" data-c="${t.code}"><div><b>${esc(t.name)}</b><small>Room ${esc(t.room)} · Rent ${inr(t.rent)}</small></div><span class="chip ${s.pending?'bad':'ok'}">${s.pending?inr(s.pending)+' due':'All clear'}</span></div>`}).join(''):'<div class="center" style="padding:16px 0">No tenants yet</div>'}</div>
+<div class="card"><h2>Electricity rate</h2><label>Rate per unit (₹)</label><div class="row"><input id="rate" type="number" inputmode="decimal" value="${RATE}"><button data-act="saverate" style="margin-top:0;flex:0 0 110px">Save</button></div><p class="sub" style="margin:8px 0 0">Applies to new readings. Old bills stay the same.</p></div>
+<div class="card"><h2>Add new tenant</h2><label>Tenant name</label><input id="n"><div class="row"><div><label>Room no.</label><input id="r"></div><div><label>Monthly rent (₹)</label><input id="rent" type="number" inputmode="decimal"></div></div>
+<div class="row"><div><label>Rent due day (1–28)</label><input id="dd" type="number" inputmode="numeric" value="5"></div><div><label>Current meter reading</label><input id="ir" type="number" inputmode="decimal"></div></div>
+<button data-act="add">Create tenant &amp; generate code</button>${err?`<div class="msg">${esc(err)}</div>`:''}</div><button class="ghost" data-act="llogout">Log out</button>`;
+const vDetail=t=>{const s=summary(t),m=nowM(),ex=(t.readings||[]).find(r=>r.month===m);return `<button class="back" data-act="back">← All tenants</button>
+<h1>${esc(t.name)}</h1><p class="sub">Room ${esc(t.room)} · Rent ${inr(t.rent)} · due on day ${t.dueDay} · ${inr(RATE)}/unit</p>
+<div class="card"><h2>Tenant login code</h2><div class="code">${t.code}</div><button class="ghost" data-act="copy" data-c="${t.code}">Copy code</button></div>
+<div class="card hero"><div class="sub" style="margin:0">Total pending</div><div class="big">${inr(s.pending)}</div><div class="sub" style="margin:0">Next rent due: ${dueText(s)}</div></div>
+<div class="card"><h2>Add meter reading</h2><label>Month</label><input id="mm" type="month" value="${m}"><label>Current meter reading</label><input id="mr" type="number" inputmode="decimal" value="${ex?ex.reading:''}">
+<div class="preview" id="pv">Enter reading to see the bill</div><button data-act="saveread">Save reading</button>${err?`<div class="msg">${esc(err)}</div>`:''}</div>
+<div class="card"><h2>Monthly records</h2>${monthRows(t,true)}</div><button class="danger" data-act="del">${confirmDel?'Tap again to delete tenant':'Delete tenant'}</button>`};
+const vTLogin=()=>`<button class="back" data-act="home">← Back</button><h1>Welcome 👋</h1><p class="sub">Enter the code your landlord gave you.</p><div class="card"><label>Tenant code</label><input id="code" maxlength="6" style="text-transform:uppercase;letter-spacing:4px;font-size:20px;text-align:center"><button data-act="tlogin">Log in</button>${err?`<div class="msg">${esc(err)}</div>`:''}</div>`;
+const vTenant=t=>{const s=summary(t),c=s.rows[0],last=[...(t.readings||[])].sort((a,b)=>a.month<b.month?1:-1)[0];return `<h1>Hi, ${esc(t.name)}</h1><p class="sub">Room ${esc(t.room)}</p>
+<div class="card hero"><div class="sub" style="margin:0">Total pending</div><div class="big">${inr(s.pending)}</div><div class="sub" style="margin:0">Next rent due: ${dueText(s)}</div></div>
+<div class="card"><h2>${mlabel(c.m)}</h2><div class="kv"><span>Rent ${inr(c.rent)}</span><span class="chip ${c.rentPaid?'ok':'bad'}">${c.rentPaid?'Paid':'Unpaid'}</span></div>
+${c.r?`<div class="kv"><span>Electricity bill</span><b>${inr(c.r.amount)}</b></div><div class="kv"><span>${c.r.units} units × ${inr(c.r.rate)}</span><span class="chip ${c.billPaid?'ok':'bad'}">${c.billPaid?'Paid':'Unpaid'}</span></div>`:`<div class="kv"><span>Electricity bill</span><span style="color:var(--mute)">Not generated yet</span></div>`}
+${last?`<div class="kv"><span>Last meter reading</span><b>${last.reading}</b></div>`:''}</div><div class="card"><h2>History</h2>${monthRows(t,false)}</div><button class="ghost" data-act="tlogout">Log out</button>`};
+
+function render(){const a=$('#app');
+ if(role==='landlord'){if(!landlord)a.innerHTML=vLandlordLogin();else{const t=tenants.find(x=>x.code===sel);a.innerHTML=t?vDetail(t):vList();if(t)preview()}}
+ else if(role==='tenant')a.innerHTML=me?vTenant(me):vTLogin();else a.innerHTML=vStart()}
+function preview(){const t=tenants.find(x=>x.code===sel),mr=$('#mr'),mm=$('#mm'),pv=$('#pv');if(!t||!mr)return;const v=parseFloat(mr.value);
+ if(isNaN(v)){pv.textContent='Enter reading to see the bill';return}const p=prevReading(t,mm.value),u=+(v-p).toFixed(2);
+ pv.textContent=u<0?`Reading is lower than previous (${p})`:`Previous ${p} → ${u} units × ${inr(RATE)} = ${inr(u*RATE)}`}
+document.addEventListener('input',e=>{if(e.target.id==='mr'||e.target.id==='mm')preview()});
+const clear=()=>{unsubs.forEach(u=>u());unsubs=[]};
+function startLandlord(){clear();unsubs.push(onSnapshot(doc(db,'settings','main'),s=>{if(s.exists()&&+s.data().rate>0)RATE=+s.data().rate;render()}),
+ onSnapshot(collection(db,'tenants'),s=>{tenants=s.docs.map(d=>({code:d.id,...d.data()})).sort((a,b)=>(a.created||0)-(b.created||0));if(sel&&!tenants.find(t=>t.code===sel))sel=null;render()},()=>{err='Could not load tenants. Check Firestore rules.';render()}))}
+function watchTenant(code){clear();unsubs.push(onSnapshot(doc(db,'tenants',code),s=>{me=s.exists()?{code,...s.data()}:null;if(!me)err='This tenant account was removed.';render()},()=>{err='Could not load data.';render()}))}
+
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;err='';
+ try{
+ if(act==='role'){role=b.dataset.r;ls.set('role',role);render()}
+ else if(act==='home'){role=null;ls.del('role');render()}
+ else if(act==='llogin'){await signInWithEmailAndPassword(auth,$('#em').value.trim(),$('#pw').value)}
+ else if(act==='llogout'){await signOut(auth);sel=null}
+ else if(act==='open'){sel=b.dataset.c;confirmDel=false;render();scrollTo(0,0)}
+ else if(act==='back'){sel=null;render()}
+ else if(act==='copy'){try{await navigator.clipboard.writeText(b.dataset.c);b.textContent='Copied ✓'}catch(_){b.textContent='Select the code above to copy'}}
+ else if(act==='saverate'){const v=parseFloat($('#rate').value);if(isNaN(v)||v<=0){err='Enter a valid rate.';render();return}await setDoc(doc(db,'settings','main'),{rate:v});b.textContent='Saved ✓'}
+ else if(act==='add'){const name=$('#n').value.trim(),room=$('#r').value.trim(),rent=parseFloat($('#rent').value),dd=parseInt($('#dd').value),ir=parseFloat($('#ir').value);
+  if(!name||!room||isNaN(rent)||isNaN(ir)||!(dd>=1&&dd<=28)){err='Please fill all fields correctly.';render();return}
+  const code=genCode();await setDoc(doc(db,'tenants',code),{name,room,rent,dueDay:dd,initialReading:ir,startMonth:nowM(),readings:[],payments:{},created:Date.now()});sel=code;render()}
+ else if(act==='saveread'){const t=tenants.find(x=>x.code===sel),month=$('#mm').value,v=parseFloat($('#mr').value);
+  if(!month||isNaN(v)){err='Enter month and reading.';render();return}const p=prevReading(t,month);
+  if(v<p){err=`Reading can’t be lower than previous (${p}).`;render();return}
+  const units=+(v-p).toFixed(2),readings=(t.readings||[]).filter(r=>r.month!==month).concat({month,reading:v,units,rate:RATE,amount:+(units*RATE).toFixed(2)});
+  await updateDoc(doc(db,'tenants',sel),{readings,startMonth:month<t.startMonth?month:t.startMonth})}
+ else if(act==='pay'){const t=tenants.find(x=>x.code===sel),pay=JSON.parse(JSON.stringify(t.payments||{})),m=b.dataset.m,k=b.dataset.k;pay[m]=pay[m]||{};pay[m][k]=!pay[m][k];await updateDoc(doc(db,'tenants',sel),{payments:pay})}
+ else if(act==='del'){if(!confirmDel){confirmDel=true;render();return}await deleteDoc(doc(db,'tenants',sel));sel=null;confirmDel=false}
+ else if(act==='tlogin'){const code=$('#code').value.trim().toUpperCase();if(code.length<6){err='Enter the 6-character code.';render();return}
+  const s=await getDoc(doc(db,'tenants',code));if(!s.exists()){err='Code not found. Check with your landlord.';render();return}watchTenant(code);ls.set('tcode',code)}
+ else if(act==='tlogout'){ls.del('tcode');clear();me=null;render()}
+ }catch(ex){err=act==='llogin'?'Wrong email or password.':'Something went wrong. Check your internet and try again.';render()}});
+
+onAuthStateChanged(auth,u=>{landlord=u;if(u&&role==='landlord')startLandlord();else if(!u&&role==='landlord')clear();render()});
+role=ls.get('role');const tc=ls.get('tcode');if(tc&&role==='tenant')watchTenant(tc);
+render();
+</script></body></html>
