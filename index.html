@@ -29,7 +29,7 @@ button.ghost{background:var(--acc2);color:var(--acc)}button.danger{background:va
 .preview{background:var(--acc2);color:var(--acc);padding:10px 12px;border-radius:12px;margin-top:10px;font-weight:600}
 .back{background:none;color:var(--acc);width:auto;padding:4px 0;margin:0 0 8px}.msg{color:var(--bad);font-size:14px;margin-top:8px}.center{text-align:center;color:var(--mute);padding:40px 0}
 </style></head><body><div class="wrap" id="app"><div class="center">Loading…</div></div>
-<script type="module">
+<script>addEventListener('error',function(e){if(e.target&&e.target!==window&&e.target.tagName!=='SCRIPT')return;var a=document.getElementById('app');if(a)a.innerHTML='<pre style="white-space:pre-wrap;padding:16px">Error: '+(e.message||(e.target&&e.target.src)||'script load failed')+'</pre>'},true);addEventListener('unhandledrejection',function(e){var a=document.getElementById('app');if(a)a.innerHTML='<pre style="white-space:pre-wrap;padding:16px">Error: '+e.reason+'</pre>'})</script><script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {getFirestore,doc,collection,onSnapshot,setDoc,updateDoc,deleteDoc,getDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
